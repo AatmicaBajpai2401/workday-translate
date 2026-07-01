@@ -1,0 +1,47 @@
+{
+  "id": "inventory-upload-app",
+  "name": "Inventory Upload Application",
+  "description": "Upload pipe-delimited inventory data files and save to Workday storage",
+  "version": "1.0.0",
+  "author": "Your Organization",
+  "minWextVersion": "2.0.0",
+  "permissions": {
+    "businessObjects": [
+      {
+        "name": "UploadedInventoryData",
+        "operations": ["create", "read", "update", "delete"]
+      }
+    ]
+  },
+  "pages": [
+    {
+      "id": "inventory-upload-page",
+      "name": "Inventory Upload",
+      "path": "/inventory-upload",
+      "file": "ui/pages/InventoryUploadPage.js",
+      "icon": "upload",
+      "description": "Upload and manage inventory data"
+    }
+  ],
+  "orchestrations": [
+    {
+      "id": "save-inventory-data",
+      "name": "Save Inventory Data",
+      "file": "orchestrations/SaveInventoryData.orchestration"
+    }
+  ],
+  "presentations": [
+    {
+      "id": "get-inventory-data",
+      "name": "Get Inventory Data",
+      "file": "presentations/GetInventoryData.presentation"
+    }
+  ],
+  "businessObjects": [
+    {
+      "id": "uploaded-inventory-data",
+      "name": "UploadedInventoryData",
+      "file": "businessObjects/UploadedInventoryData.businessObject"
+    }
+  ]
+}

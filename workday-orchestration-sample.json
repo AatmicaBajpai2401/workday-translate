@@ -1,0 +1,184 @@
+{
+  "orchestration": {
+    "name": "AWS Translate Document Orchestration",
+    "description": "Translates documents using AWS Translate API",
+    "version": "1.0",
+    "steps": [
+      {
+        "step": 1,
+        "name": "Receive Input Parameters",
+        "type": "input",
+        "description": "Get document and language parameters from Extend app",
+        "variables": {
+          "documentBase64": {
+            "type": "string",
+            "description": "Base64 encoded document from Extend app",
+            "required": true
+          },
+          "inputLanguage": {
+            "type": "string",
+            "description": "Source language code (e.g., 'en', 'es')",
+            "required": true
+          },
+          "outputLanguage": {
+            "type": "string",
+            "description": "Target language code (e.g., 'en', 'es')",
+            "required": true
+          },
+          "fileExtension": {
+            "type": "string",
+            "description": "File extension (.txt, .html, .docx)",
+            "required": true
+          }
+        }
+      },
+      {
+        "step": 2,
+        "name": "Determine Content Type",
+        "type": "transformation",
+        "description": "Map file extension to MIME type",
+        "logic": {
+          "if": "fileExtension == '.txt'",
+          "then": "documentContentType = 'text/plain'",
+          "elseif": "fileExtension == '.html'",
+          "then": "documentContentType = 'text/html'",
+          "elseif": "fileExtension == '.docx'",
+          "then": "documentContentType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'",
+          "else": "throw error 'Unsupported file type'"
+        },
+        "output": {
+          "documentContentType": "string"
+        }
+      },
+      {
+        "step": 3,
+        "name": "Validate Language Codes",
+        "type": "validation",
+        "description": "Ensure one language is English",
+        "validation": {
+          "rule": "inputLanguage == 'en' OR outputLanguage == 'en'",
+          "errorMessage": "One of the languages must be English"
+        }
+      },
+      {
+        "step": 4,
+        "name": "Build AWS Translate Request",
+        "type": "create_json",
+        "description": "Create request body for AWS Translate API",
+        "json_structure": {
+          "Document": {
+            "Content": "{{documentBase64}}",
+            "ContentType": "{{documentContentType}}"
+          },
+          "SourceLanguageCode": "{{inputLanguage}}",
+          "TargetLanguageCode": "{{outputLanguage}}"
+        },
+        "output": {
+          "requestBody": "json"
+        }
+      },
+      {
+        "step": 5,
+        "name": "Call AWS Translate API",
+        "type": "rest_api_call",
+        "description": "Send document to AWS Translate for translation",
+        "api_configuration": {
+          "url": "https://translate.us-east-1.amazonaws.com/",
+          "method": "POST",
+          "headers": {
+            "Content-Type": "application/x-amz-json-1.1",
+            "X-Amz-Target": "AWSShineFrontendService_20170701.TranslateDocument"
+          },
+          "authentication": {
+            "type": "AWS_SIGNATURE_V4",
+            "service": "translate",
+            "region": "us-east-1",
+            "credentials_reference": "AWS_TRANSLATE_INTEGRATION_SYSTEM"
+          },
+          "body": "{{requestBody}}",
+          "timeout": 60000
+        },
+        "error_handling": {
+          "retry": {
+            "max_attempts": 3,
+            "backoff_strategy": "exponential",
+            "initial_delay": 1000
+          },
+          "catch": [
+            {
+              "error_type": "UnsupportedLanguagePairException",
+              "action": "return_error",
+              "message": "The selected language pair is not supported"
+            },
+            {
+              "error_type": "InvalidRequestException",
+              "action": "return_error",
+              "message": "Invalid request format. Please check the document and try again"
+            },
+            {
+              "error_type": "TextSizeLimitExceededException",
+              "action": "return_error",
+              "message": "Document size exceeds 10MB limit"
+            },
+            {
+              "error_type": "InternalServerException",
+              "action": "retry",
+              "message": "AWS service error. Retrying..."
+            }
+          ]
+        },
+        "output": {
+          "apiResponse": "json"
+        }
+      },
+      {
+        "step": 6,
+        "name": "Extract Translated Document",
+        "type": "parse_json",
+        "description": "Extract the translated document from API response",
+        "json_path": "$.TranslatedDocument.Content",
+        "input": "{{apiResponse}}",
+        "output": {
+          "translatedDocumentBase64": "string"
+        }
+      },
+      {
+        "step": 7,
+        "name": "Prepare Response",
+        "type": "create_json",
+        "description": "Format the response to return to Extend app",
+        "json_structure": {
+          "success": true,
+          "translatedDocument": "{{translatedDocumentBase64}}",
+          "sourceLanguage": "{{inputLanguage}}",
+          "targetLanguage": "{{outputLanguage}}",
+          "contentType": "{{documentContentType}}",
+          "timestamp": "{{current_timestamp}}"
+        },
+        "output": {
+          "finalResponse": "json"
+        }
+      },
+      {
+        "step": 8,
+        "name": "Return Response",
+        "type": "output",
+        "description": "Send translated document back to Extend app",
+        "return": "{{finalResponse}}"
+      }
+    ],
+    "error_handling": {
+      "global": {
+        "on_error": {
+          "log_error": true,
+          "return_error_response": {
+            "success": false,
+            "error": "{{error_message}}",
+            "error_code": "{{error_code}}",
+            "timestamp": "{{current_timestamp}}"
+          }
+        }
+      }
+    }
+  }
+}
